@@ -72,6 +72,9 @@ class DeferredExecutionContext(ExecutionContext):
     ) -> Union[AwaitableOrValue[Dict[str, Any]], SyncFuture]:
         results: AwaitableOrValue[Dict[str, Any]] = {}
 
+        if not fields:
+            return results
+
         future = SyncFuture()
 
         unresolved = 0
