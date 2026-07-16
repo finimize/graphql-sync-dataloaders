@@ -2,6 +2,8 @@ from unittest import mock
 from unittest.mock import Mock
 from functools import partial
 
+import pytest
+
 from graphql import (
     graphql_sync,
     GraphQLSchema,
@@ -425,6 +427,29 @@ def test_load_many_empty_resolves_immediately():
     future = dataloader.load_many([])
     assert future.done()
     assert future.result() == []
+
+
+def test_sync_resolve_drains_pending_dataloader_batch():
+    dataloader = SyncDataLoader(lambda keys: [key * 2 for key in keys])
+
+    future = dataloader.load(4)
+    assert not future.done()  # queued, not yet dispatched
+
+    assert future.sync_resolve() == 8
+
+
+def test_sync_resolve_returns_already_resolved_value_without_draining():
+    from graphql_sync_dataloaders import resolve_future
+
+    assert resolve_future(3).sync_resolve() == 3
+
+
+def test_sync_resolve_raises_when_still_pending_after_drain():
+    from graphql_sync_dataloaders import InvalidStateError, SyncFuture
+
+    # A bare future is never queued, so draining can't resolve it.
+    with pytest.raises(InvalidStateError):
+        SyncFuture().sync_resolve()
 
 
 def test_chaining_dataloader():

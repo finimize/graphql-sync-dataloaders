@@ -103,6 +103,29 @@ class SyncFuture:
 
         return ret
 
+    def sync_resolve(self) -> Any:
+        """Resolve this future inline by draining pending dataloader batches
+        (``Promise.get`` at a synchronous boundary).
+
+        Use outside a GraphQL execution context, where nothing else drives the
+        global batch queue — inside execution the ``DeferredExecutionContext``
+        already drains it after the operation. Raises ``InvalidStateError`` if
+        the future is still pending once the queue has drained (e.g. a bare
+        future that was never queued by a dataloader).
+        """
+        if self.done():
+            return self.result()
+        # Imported here rather than at module scope: sync_dataloader imports
+        # this module, so a top-level import would be circular.
+        from .sync_dataloader import dataloader_batch_callbacks
+
+        dataloader_batch_callbacks.run_all_callbacks()
+        if not self.done():
+            raise InvalidStateError(
+                "SyncFuture is still pending after draining dataloader batches"
+            )
+        return self.result()
+
 
 def resolve_future(value: Any) -> SyncFuture:
     """Wrap a value in an already-resolved future (``Promise.resolve``)."""
