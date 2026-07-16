@@ -405,6 +405,28 @@ def test_result_field_ordering():
     assert mock_load_fn.call_count == 1
 
 
+def test_load_many_batches_keys_into_a_single_call():
+    def load_fn(keys):
+        return [key * 2 for key in keys]
+
+    mock_load_fn = Mock(wraps=load_fn)
+    dataloader = SyncDataLoader(mock_load_fn)
+
+    future = dataloader.load_many([1, 2, 3])
+    dataloader.dispatch_queue()
+
+    assert future.result() == [2, 4, 6]
+    assert mock_load_fn.call_count == 1
+    assert mock_load_fn.call_args_list[0].args[0] == [1, 2, 3]
+
+
+def test_load_many_empty_resolves_immediately():
+    dataloader = SyncDataLoader(Mock())
+    future = dataloader.load_many([])
+    assert future.done()
+    assert future.result() == []
+
+
 def test_chaining_dataloader():
     USERS = {
         "1": {

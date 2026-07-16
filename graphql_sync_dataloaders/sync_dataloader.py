@@ -2,7 +2,7 @@ import contextvars
 from typing import Callable
 from graphql.pyutils import is_collection
 
-from .sync_future import SyncFuture
+from .sync_future import SyncFuture, all_futures
 
 
 class DataloaderBatchCallbacks:
@@ -57,6 +57,11 @@ class SyncDataLoader:
                 dataloader_batch_callbacks.add_callback(self.dispatch_queue)
             self._cache[key] = future
             return future
+
+    def load_many(self, keys):
+        """Load a list of keys, resolving to a future of their results in order
+        (``Promise.all`` over ``load``). All keys join the same batch."""
+        return all_futures([self.load(key) for key in keys])
 
     def clear(self, key):
         self._cache.pop(key, None)

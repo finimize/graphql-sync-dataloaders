@@ -1,6 +1,11 @@
 import pytest
 
-from graphql_sync_dataloaders import SyncFuture, InvalidStateError
+from graphql_sync_dataloaders import (
+    SyncFuture,
+    InvalidStateError,
+    all_futures,
+    resolve_future,
+)
 
 
 def test_sync_future():
@@ -83,6 +88,46 @@ def test_set_result_flattens_already_rejected_future():
 
     assert outer.done()
     assert isinstance(outer.exception(), ValueError)
+
+
+def test_resolve_future_wraps_a_value():
+    f = resolve_future(42)
+    assert f.done()
+    assert f.result() == 42
+
+
+def test_all_futures_resolves_when_every_input_completes():
+    a = SyncFuture()
+    b = SyncFuture()
+    r = all_futures([a, b])
+    assert not r.done()
+
+    a.set_result(1)
+    assert not r.done()
+    b.set_result(2)
+
+    assert r.done()
+    assert r.result() == [1, 2]
+
+
+def test_all_futures_preserves_order_and_passes_plain_values_through():
+    pending = SyncFuture()
+    r = all_futures([resolve_future("a"), pending, "c"])
+    assert not r.done()
+
+    pending.set_result("b")
+
+    assert r.result() == ["a", "b", "c"]
+
+
+def test_all_futures_of_only_resolved_or_plain_is_done_immediately():
+    r = all_futures([1, resolve_future(2), 3])
+    assert r.done()
+    assert r.result() == [1, 2, 3]
+
+
+def test_all_futures_empty():
+    assert all_futures([]).result() == []
 
 
 def _resolved(value):
