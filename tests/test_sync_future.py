@@ -85,6 +85,46 @@ def test_set_result_flattens_already_rejected_future():
     assert isinstance(outer.exception(), ValueError)
 
 
+def test_resolve_wraps_a_value():
+    f = SyncFuture.resolve(42)
+    assert f.done()
+    assert f.result() == 42
+
+
+def test_all_resolves_when_every_input_completes():
+    a = SyncFuture()
+    b = SyncFuture()
+    r = SyncFuture.all([a, b])
+    assert not r.done()
+
+    a.set_result(1)
+    assert not r.done()
+    b.set_result(2)
+
+    assert r.done()
+    assert r.result() == [1, 2]
+
+
+def test_all_preserves_order_and_passes_plain_values_through():
+    pending = SyncFuture()
+    r = SyncFuture.all([SyncFuture.resolve("a"), pending, "c"])
+    assert not r.done()
+
+    pending.set_result("b")
+
+    assert r.result() == ["a", "b", "c"]
+
+
+def test_all_of_only_resolved_or_plain_is_done_immediately():
+    r = SyncFuture.all([1, SyncFuture.resolve(2), 3])
+    assert r.done()
+    assert r.result() == [1, 2, 3]
+
+
+def test_all_empty():
+    assert SyncFuture.all([]).result() == []
+
+
 def _resolved(value):
     f = SyncFuture()
     f.set_result(value)

@@ -2,6 +2,8 @@ from unittest import mock
 from unittest.mock import Mock
 from functools import partial
 
+import pytest
+
 from graphql import (
     graphql_sync,
     GraphQLSchema,
@@ -12,7 +14,7 @@ from graphql import (
     GraphQLList,
 )
 
-from graphql_sync_dataloaders import DeferredExecutionContext, SyncDataLoader
+from graphql_sync_dataloaders import DeferredExecutionContext, SyncDataLoader, SyncFuture
 
 graphql_sync_deferred = partial(
     graphql_sync, execution_context_class=DeferredExecutionContext
@@ -403,6 +405,49 @@ def test_result_field_ordering():
     keys = list(result.data.keys())
     assert keys == ["name1", "hello1", "name2", "hello2"]
     assert mock_load_fn.call_count == 1
+
+
+def test_load_many_batches_keys_into_a_single_call():
+    def load_fn(keys):
+        return [key * 2 for key in keys]
+
+    mock_load_fn = Mock(wraps=load_fn)
+    dataloader = SyncDataLoader(mock_load_fn)
+
+    future = dataloader.load_many([1, 2, 3])
+    dataloader.dispatch_queue()
+
+    assert future.result() == [2, 4, 6]
+    assert mock_load_fn.call_count == 1
+    assert mock_load_fn.call_args_list[0].args[0] == [1, 2, 3]
+
+
+def test_load_many_empty_resolves_immediately():
+    dataloader = SyncDataLoader(Mock())
+    future = dataloader.load_many([])
+    assert future.done()
+    assert future.result() == []
+
+
+def test_get_drains_pending_dataloader_batch():
+    dataloader = SyncDataLoader(lambda keys: [key * 2 for key in keys])
+
+    future = dataloader.load(4)
+    assert not future.done()  # queued, not yet dispatched
+
+    assert future.get() == 8
+
+
+def test_get_returns_already_resolved_value_without_draining():
+    assert SyncFuture.resolve(3).get() == 3
+
+
+def test_get_raises_when_still_pending_after_drain():
+    from graphql_sync_dataloaders import InvalidStateError
+
+    # A bare future is never queued, so draining can't resolve it.
+    with pytest.raises(InvalidStateError):
+        SyncFuture().get()
 
 
 def test_chaining_dataloader():

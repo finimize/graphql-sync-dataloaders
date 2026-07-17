@@ -58,6 +58,10 @@ class SyncDataLoader:
             self._cache[key] = future
             return future
 
+    def load_many(self, keys):
+        """Load many keys into a single batch (``Promise.all`` over ``load``)."""
+        return SyncFuture.all([self.load(key) for key in keys])
+
     def clear(self, key):
         self._cache.pop(key, None)
 
