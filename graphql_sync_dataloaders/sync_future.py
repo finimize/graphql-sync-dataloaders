@@ -104,19 +104,14 @@ class SyncFuture:
         return ret
 
     def sync_resolve(self) -> Any:
-        """Resolve this future inline by draining pending dataloader batches
-        (``Promise.get`` at a synchronous boundary).
+        """Resolve this future by draining pending dataloader batches.
 
-        Use outside a GraphQL execution context, where nothing else drives the
-        global batch queue — inside execution the ``DeferredExecutionContext``
-        already drains it after the operation. Raises ``InvalidStateError`` if
-        the future is still pending once the queue has drained (e.g. a bare
-        future that was never queued by a dataloader).
+        For use outside a GraphQL execution context, which otherwise drives the
+        batch queue itself.
         """
         if self.done():
             return self.result()
-        # Imported here rather than at module scope: sync_dataloader imports
-        # this module, so a top-level import would be circular.
+        # Local import: sync_dataloader imports this module.
         from .sync_dataloader import dataloader_batch_callbacks
 
         dataloader_batch_callbacks.run_all_callbacks()
@@ -137,9 +132,7 @@ def resolve_future(value: Any) -> SyncFuture:
 def all_futures(futures: List) -> SyncFuture:
     """Resolve once every input future completes (``Promise.all``).
 
-    Non-future items pass through unchanged and order is preserved. Batching is
-    driven by the global dataloader batch queue, so the inputs resolve
-    independently and no callback propagation between them is needed.
+    Non-future items pass through unchanged; order is preserved.
     """
     results: List = [None] * len(futures)
     result_future = SyncFuture()

@@ -59,8 +59,7 @@ class SyncDataLoader:
             return future
 
     def load_many(self, keys):
-        """Load a list of keys, resolving to a future of their results in order
-        (``Promise.all`` over ``load``). All keys join the same batch."""
+        """Load many keys into a single batch (``Promise.all`` over ``load``)."""
         return all_futures([self.load(key) for key in keys])
 
     def clear(self, key):
