@@ -429,25 +429,25 @@ def test_load_many_empty_resolves_immediately():
     assert future.result() == []
 
 
-def test_sync_resolve_drains_pending_dataloader_batch():
+def test_get_drains_pending_dataloader_batch():
     dataloader = SyncDataLoader(lambda keys: [key * 2 for key in keys])
 
     future = dataloader.load(4)
     assert not future.done()  # queued, not yet dispatched
 
-    assert future.sync_resolve() == 8
+    assert future.get() == 8
 
 
-def test_sync_resolve_returns_already_resolved_value_without_draining():
-    assert SyncFuture.resolve(3).sync_resolve() == 3
+def test_get_returns_already_resolved_value_without_draining():
+    assert SyncFuture.resolve(3).get() == 3
 
 
-def test_sync_resolve_raises_when_still_pending_after_drain():
+def test_get_raises_when_still_pending_after_drain():
     from graphql_sync_dataloaders import InvalidStateError
 
     # A bare future is never queued, so draining can't resolve it.
     with pytest.raises(InvalidStateError):
-        SyncFuture().sync_resolve()
+        SyncFuture().get()
 
 
 def test_chaining_dataloader():

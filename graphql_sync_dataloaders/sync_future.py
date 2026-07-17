@@ -142,8 +142,9 @@ class SyncFuture:
 
         return ret
 
-    def sync_resolve(self) -> Any:
-        """Resolve this future by draining pending dataloader batches.
+    def get(self) -> Any:
+        """Resolve this future by draining pending dataloader batches
+        (``Promise.get``).
 
         For use outside a GraphQL execution context, which otherwise drives the
         batch queue itself.
