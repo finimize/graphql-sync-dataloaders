@@ -1,11 +1,6 @@
 from .execution_context import DeferredExecutionContext
 from .sync_dataloader import SyncDataLoader
-from .sync_future import (
-    SyncFuture,
-    InvalidStateError,
-    all_futures,
-    resolve_future,
-)
+from .sync_future import SyncFuture, InvalidStateError
 
 
 __all__ = [
@@ -13,6 +8,4 @@ __all__ = [
     "SyncDataLoader",
     "SyncFuture",
     "InvalidStateError",
-    "all_futures",
-    "resolve_future",
 ]

@@ -14,7 +14,7 @@ from graphql import (
     GraphQLList,
 )
 
-from graphql_sync_dataloaders import DeferredExecutionContext, SyncDataLoader
+from graphql_sync_dataloaders import DeferredExecutionContext, SyncDataLoader, SyncFuture
 
 graphql_sync_deferred = partial(
     graphql_sync, execution_context_class=DeferredExecutionContext
@@ -439,13 +439,11 @@ def test_sync_resolve_drains_pending_dataloader_batch():
 
 
 def test_sync_resolve_returns_already_resolved_value_without_draining():
-    from graphql_sync_dataloaders import resolve_future
-
-    assert resolve_future(3).sync_resolve() == 3
+    assert SyncFuture.resolve(3).sync_resolve() == 3
 
 
 def test_sync_resolve_raises_when_still_pending_after_drain():
-    from graphql_sync_dataloaders import InvalidStateError, SyncFuture
+    from graphql_sync_dataloaders import InvalidStateError
 
     # A bare future is never queued, so draining can't resolve it.
     with pytest.raises(InvalidStateError):

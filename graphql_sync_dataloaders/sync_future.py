@@ -24,6 +24,45 @@ class SyncFuture:
     def __init__(self):
         self._callbacks = []
 
+    @classmethod
+    def resolve(cls, value: Any) -> "SyncFuture":
+        """Wrap a value in an already-resolved future (``Promise.resolve``)."""
+        future = cls()
+        future.set_result(value)
+        return future
+
+    @classmethod
+    def all(cls, futures: List) -> "SyncFuture":
+        """Resolve once every input future completes (``Promise.all``).
+
+        Non-future items pass through unchanged; order is preserved.
+        """
+        results: List = [None] * len(futures)
+        result_future = cls()
+        unresolved = 0
+
+        for i, f in enumerate(futures):
+            if not isinstance(f, SyncFuture):
+                results[i] = f
+                continue
+            if f.done():
+                results[i] = f.result()
+                continue
+            unresolved += 1
+
+            def on_done(value, idx=i):
+                nonlocal unresolved
+                results[idx] = value
+                unresolved -= 1
+                if unresolved == 0:
+                    result_future.set_result(results)
+
+            f.add_done_callback(on_done)
+
+        if unresolved == 0:
+            result_future.set_result(results)
+        return result_future
+
     def done(self) -> bool:
         return self._state != _PENDING
 
@@ -120,45 +159,6 @@ class SyncFuture:
                 "SyncFuture is still pending after draining dataloader batches"
             )
         return self.result()
-
-
-def resolve_future(value: Any) -> SyncFuture:
-    """Wrap a value in an already-resolved future (``Promise.resolve``)."""
-    future = SyncFuture()
-    future.set_result(value)
-    return future
-
-
-def all_futures(futures: List) -> SyncFuture:
-    """Resolve once every input future completes (``Promise.all``).
-
-    Non-future items pass through unchanged; order is preserved.
-    """
-    results: List = [None] * len(futures)
-    result_future = SyncFuture()
-    unresolved = 0
-
-    for i, f in enumerate(futures):
-        if not isinstance(f, SyncFuture):
-            results[i] = f
-            continue
-        if f.done():
-            results[i] = f.result()
-            continue
-        unresolved += 1
-
-        def on_done(value, idx=i):
-            nonlocal unresolved
-            results[idx] = value
-            unresolved -= 1
-            if unresolved == 0:
-                result_future.set_result(results)
-
-        f.add_done_callback(on_done)
-
-    if unresolved == 0:
-        result_future.set_result(results)
-    return result_future
 
 
 def maybe_then(value, on_complete, on_exception=None):
