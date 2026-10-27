@@ -138,7 +138,7 @@ class DeferredExecutionContext(ExecutionContext):
 
         def on_exception(e, future=None):
             located = located_error(e, field_nodes, path.as_list())
-            self.handle_field_error(located, return_type)
+            self.handle_field_error(located, return_type, path)
             if future is not None:
                 future.set_result(None)
 
@@ -224,7 +224,7 @@ class DeferredExecutionContext(ExecutionContext):
                     e, field_nodes, item_path.as_list()
                 )
                 try:
-                    self.handle_field_error(error, item_type)
+                    self.handle_field_error(error, item_type, item_path)
                 except Exception as propagated:
                     # A non-null item failed, so the whole list is null.
                     if not future.done():
