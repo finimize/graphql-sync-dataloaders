@@ -116,3 +116,33 @@ def test_all_fails_when_any_input_fails():
     second.set_exception(ValueError("boom"))
 
     assert isinstance(combined.exception(), ValueError)
+
+
+def test_non_null_child_failing_in_a_list_item_nulls_only_that_item():
+    loader = SyncDataLoader(
+        lambda keys: [ValueError("boom") if key == "bad" else key for key in keys]
+    )
+    child = GraphQLObjectType(
+        name="Child",
+        fields={
+            "name": GraphQLField(
+                GraphQLNonNull(GraphQLString),
+                resolve=lambda source, _info: loader.load(source),
+            )
+        },
+    )
+    schema = GraphQLSchema(
+        query=GraphQLObjectType(
+            name="Query",
+            fields={
+                "children": GraphQLField(
+                    GraphQLList(child), resolve=lambda *_: ["ok", "bad"]
+                )
+            },
+        )
+    )
+
+    result = run(schema, "{ children { name } }")
+
+    assert result.data == {"children": [{"name": "ok"}, None]}
+    assert errors_of(result) == [("boom", ["children", 1, "name"])]

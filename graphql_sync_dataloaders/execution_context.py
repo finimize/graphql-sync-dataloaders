@@ -241,8 +241,8 @@ class DeferredExecutionContext(ExecutionContext):
                 partial(on_exception, item_path),
             ))
 
-        for item_or_future, callback, on_exception in callbacks:
-            maybe_then(item_or_future, callback, on_exception)
+        for item_or_future, callback, on_item_exception in callbacks:
+            maybe_then(item_or_future, callback, on_item_exception)
 
         if not unresolved:
             return results
