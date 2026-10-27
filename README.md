@@ -186,6 +186,10 @@ def get_best_friend_name(userId: str) -> str:
       )
 ```
 
+As with a Promise, a failure skips any remaining `on_success` callbacks and passes
+down the chain. During execution it becomes an ordinary field error, so it nulls the
+nearest nullable field and appears in the result's `errors`.
+
 
 ## How it works
 

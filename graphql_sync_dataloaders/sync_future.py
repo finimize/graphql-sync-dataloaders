@@ -16,6 +16,7 @@ class SyncFuture:
     _state = _PENDING
     _result: Optional[Any] = None
     _exception: Optional[Exception] = None
+    _is_adopting = False
     _callbacks: List[Callable]
     _cancel_message = None
 
@@ -46,13 +47,22 @@ class SyncFuture:
                 results[i] = f
                 continue
             if f.done():
-                results[i] = f.result()
+                if f._exception is not None:
+                    result_future.set_exception(f._exception)
+                    return result_future
+                results[i] = f._result
                 continue
             unresolved += 1
 
-            def on_done(value, idx=i):
+            def on_done(_value, idx=i, source=f):
                 nonlocal unresolved
-                results[idx] = value
+                if result_future.done():
+                    return
+                # Like Promise.all: the first failure rejects the whole set.
+                if source._exception is not None:
+                    result_future.set_exception(source._exception)
+                    return
+                results[idx] = source._result
                 unresolved -= 1
                 if unresolved == 0:
                     result_future.set_result(results)
@@ -93,7 +103,10 @@ class SyncFuture:
                 else:
                     self.set_result(result._result)
             else:
-                result.add_done_callback(self.set_result)
+                # Adopt the inner future's outcome, failure included -- passing its
+                # value alone would turn a failure into ``None``.
+                self._is_adopting = True
+                result.add_done_callback(lambda _value: self.set_result(result))
         else:
             self._assert_state(_PENDING)
             self._result = result
@@ -116,8 +129,18 @@ class SyncFuture:
         if not callbacks:
             return
         self._callbacks = []
+        # Done-callbacks fire whatever the outcome (callers inspect ``exception()``).
+        # Run them all even if one raises: a dropped callback leaves its chain
+        # pending forever, which surfaces only as "deferred execution failed".
+        first_error = None
         for callback in callbacks:
-            callback(self._result)
+            try:
+                callback(self._result)
+            except Exception as error:
+                if first_error is None:
+                    first_error = error
+        if first_error is not None:
+            raise first_error
 
     def then(
             self,
@@ -126,19 +149,41 @@ class SyncFuture:
     ) -> "SyncFuture":
         ret = SyncFuture()
 
-        def call_and_resolve(v: Any) -> None:
+        def reject(error: Exception) -> None:
+            if handle_exception is None:
+                ret.set_exception(error)
+                return
             try:
-                ret.set_result(on_complete(v))
-            except Exception as e:
-                if handle_exception is None:
-                    ret.set_exception(e)
-                else:
-                    handle_exception(e, ret)
+                handle_exception(error, ret)
+            except Exception as propagated:
+                # graphql-core re-raises a non-null field's error so the nearest
+                # nullable parent can null itself; carry it up as a rejection.
+                if ret.done():
+                    raise
+                ret.set_exception(propagated)
+                return
+            # A handler that adopted another future (e.g. a fallback load) settles
+            # ``ret`` when that future does.
+            if not ret.done() and not ret._is_adopting:
+                ret.set_result(None)
+
+        def settle(_value: Any) -> None:
+            # A failure skips ``on_complete`` and passes on, as a promise rejection
+            # does -- never ``on_complete(None)``.
+            if self._exception is not None:
+                reject(self._exception)
+                return
+            try:
+                value = on_complete(self._result)
+            except Exception as error:
+                reject(error)
+                return
+            ret.set_result(value)
 
         if self.done():
-            call_and_resolve(self.result())
+            settle(self._result)
         else:
-            self.add_done_callback(call_and_resolve)
+            self.add_done_callback(settle)
 
         return ret
 

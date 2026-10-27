@@ -104,8 +104,14 @@ class DeferredExecutionContext(ExecutionContext):
                 partial(process_result, response_name),
             ))
 
+        def on_field_error(error, _ret=None):
+            # A non-null field failed with no nullable field in between, so this
+            # object is null too: fail it for the enclosing field to handle.
+            if not future.done():
+                future.set_exception(error)
+
         for field_result, callback in callbacks:
-            maybe_then(field_result, callback)
+            maybe_then(field_result, callback, on_field_error)
 
         if future.done():
             return future.result()
@@ -143,7 +149,12 @@ class DeferredExecutionContext(ExecutionContext):
             return None
 
         complete_value = partial(self.complete_value, return_type, field_nodes, info, path)
-        return maybe_then(result, complete_value, on_exception)
+        completed = maybe_then(result, complete_value, on_exception)
+        if isinstance(completed, SyncFuture):
+            # A failure anywhere in this field's subtree is this field's error, as
+            # it would be on graphql-core's own call stack.
+            return completed.then(lambda value: value, on_exception)
+        return completed
 
     def complete_list_value(
         self,
@@ -199,20 +210,30 @@ class DeferredExecutionContext(ExecutionContext):
                     if not unresolved:
                         future.set_result(results)
 
-                maybe_then(completed_value_or_future, on_completed)
+                maybe_then(
+                    completed_value_or_future,
+                    on_completed,
+                    partial(on_exception, item_path),
+                )
 
             # noinspection PyShadowingNames
-            def on_exception(item_path, e):
+            def on_exception(item_path, e, _ret=None):
                 nonlocal unresolved
-
-                unresolved -= 1
-                if not unresolved:
-                    future.set_result(results)
 
                 error = located_error(
                     e, field_nodes, item_path.as_list()
                 )
-                self.handle_field_error(error, item_type)
+                try:
+                    self.handle_field_error(error, item_type)
+                except Exception as propagated:
+                    # A non-null item failed, so the whole list is null.
+                    if not future.done():
+                        future.set_exception(propagated)
+                    return
+
+                unresolved -= 1
+                if not unresolved and not future.done():
+                    future.set_result(results)
 
             callbacks.append((
                 item_or_future,
@@ -220,8 +241,8 @@ class DeferredExecutionContext(ExecutionContext):
                 partial(on_exception, item_path),
             ))
 
-        for item_or_future, callback, on_exception in callbacks:
-            maybe_then(item_or_future, callback, on_exception)
+        for item_or_future, callback, on_item_exception in callbacks:
+            maybe_then(item_or_future, callback, on_item_exception)
 
         if not unresolved:
             return results

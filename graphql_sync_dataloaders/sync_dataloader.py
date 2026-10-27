@@ -83,7 +83,12 @@ class SyncDataLoader:
                 else:
                     future.set_result(value)
         except Exception as error:
-            for key, future in queue:
+            pending = [future for _, future in queue if not future.done()]
+            for key, _ in queue:
                 self.clear(key)
-                if not future.done():
-                    future.set_exception(error)
+            if not pending:
+                # Every future was already settled, so this came from a callback
+                # further down the chain: raise it rather than lose it.
+                raise
+            for future in pending:
+                future.set_exception(error)
