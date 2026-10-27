@@ -16,6 +16,7 @@ class SyncFuture:
     _state = _PENDING
     _result: Optional[Any] = None
     _exception: Optional[Exception] = None
+    _is_adopting = False
     _callbacks: List[Callable]
     _cancel_message = None
 
@@ -104,6 +105,7 @@ class SyncFuture:
             else:
                 # Adopt the inner future's outcome, failure included -- passing its
                 # value alone would turn a failure into ``None``.
+                self._is_adopting = True
                 result.add_done_callback(lambda _value: self.set_result(result))
         else:
             self._assert_state(_PENDING)
@@ -160,7 +162,9 @@ class SyncFuture:
                     raise
                 ret.set_exception(propagated)
                 return
-            if not ret.done():
+            # A handler that adopted another future (e.g. a fallback load) settles
+            # ``ret`` when that future does.
+            if not ret.done() and not ret._is_adopting:
                 ret.set_result(None)
 
         def settle(_value: Any) -> None:

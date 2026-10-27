@@ -108,6 +108,19 @@ def test_adopting_a_pending_future_adopts_its_failure():
     assert isinstance(outer.exception(), ValueError)
 
 
+def test_error_handler_can_resolve_with_a_pending_fallback():
+    source, fallback = SyncFuture(), SyncFuture()
+    chained = source.then(
+        lambda value: value, lambda _error, ret: ret.set_result(fallback)
+    )
+
+    source.set_exception(ValueError("boom"))
+    assert not chained.done()
+
+    fallback.set_result("fallback")
+    assert chained.result() == "fallback"
+
+
 def test_all_fails_when_any_input_fails():
     first, second = SyncFuture(), SyncFuture()
     combined = SyncFuture.all([first, second])
