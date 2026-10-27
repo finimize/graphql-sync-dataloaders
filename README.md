@@ -6,7 +6,7 @@ context (i.e. Django).
 ## Requirements
 
 * Python 3.8+
-* graphql-core >=3.2.0
+* graphql-core >=3.2.12,<3.3
 
 ## Installation
 
